@@ -66,6 +66,9 @@ if uploaded_file is not None:
     selected_chrom = st.selectbox("Select chromatogram:", options=chrom_cols)
     
     if selected_chrom:
+        rt = scaled_df.iloc[:, 0]
+        y_data = scaled_df[selected_chrom]
+        
         # Sidebar for customization
         st.sidebar.header("Graph Customization")
         
@@ -110,9 +113,6 @@ if uploaded_file is not None:
         
         # Display and edit peaks table if any
         if st.session_state.peaks:
-            rt = scaled_df.iloc[:, 0]
-            y_data = scaled_df[selected_chrom]
-            
             df_peaks = pd.DataFrame(st.session_state.peaks)
             
             if st.button("Auto-calculate label positions"):
