@@ -46,9 +46,9 @@ if uploaded_file is not None:
             
             # Tick intervals
             major_x_step = st.number_input("Major X Tick Step:", value=1.0, key="major_x")
-            minor_x_step = st.number_input("Minor X Tick Step:", value=0.2, key="minor_x")
-            major_y_step = st.number_input("Major Y Tick Step:", value=1.0, key="major_y")
-            minor_y_step = st.number_input("Minor Y Tick Step:", value=0.2, key="minor_y")
+            minor_x_step = st.number_input("Minor X Tick Step:", value=0.5, key="minor_x")
+            major_y_step = st.number_input("Major Y Tick Step:", value=0.25, key="major_y")
+            minor_y_step = st.number_input("Minor Y Tick Step:", value=0.125, key="minor_y")
             
             # Axis bounds
             x_min = st.number_input("X-axis min (RT):", value=0.0, key="x_min")
