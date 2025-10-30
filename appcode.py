@@ -9,12 +9,38 @@ st.set_page_config(page_title="GC Data Processor", layout="wide")
 
 st.title("GC Chromatogram Processor")
 
-# File uploader
-uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+# Upload mode selection
+upload_mode = st.radio("Upload Mode:", ["Single combined file", "Multiple single chromatogram files"])
 
-if uploaded_file is not None:
-    # Load data
-    df = pd.read_csv(uploaded_file)
+df = None
+if upload_mode == "Single combined file":
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+elif upload_mode == "Multiple single chromatogram files":
+    uploaded_files = st.file_uploader("Choose CSV files", type="csv", accept_multiple_files=True)
+    if uploaded_files:
+        # Read first file for retention time
+        first_file = uploaded_files[0]
+        df_first = pd.read_csv(first_file, skiprows=3, header=None, names=['Retention_Time', 'Intensity'])
+        retention_time = df_first['Retention_Time']
+        
+        # Initialize combined DataFrame
+        combined_df = pd.DataFrame({'Retention_Time': retention_time})
+        
+        # Process each file
+        for file in uploaded_files:
+            df_temp = pd.read_csv(file, skiprows=3, header=None, names=['Retention_Time', 'Intensity'])
+            intensity = df_temp['Intensity']
+            
+            # Column name from filename
+            filename = file.name.replace('.csv', '')
+            combined_df[filename] = intensity
+        
+        df = combined_df
+        st.success(f"Combined {len(uploaded_files)} files into one DataFrame.")
+
+if df is not None:
     st.success("Data loaded successfully!")
     
     # Display basic info
@@ -213,4 +239,4 @@ if uploaded_file is not None:
         
         st.pyplot(fig)
 else:
-    st.info("Please upload a CSV file to get started.")
+    st.info("Please upload files to get started.")
