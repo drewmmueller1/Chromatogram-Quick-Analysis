@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
-import io
 
 # Page config
 st.set_page_config(page_title="GC Data Processor", layout="wide")
@@ -22,6 +21,10 @@ if uploaded_file is not None:
     st.subheader("Data Overview")
     st.write(f"Shape: {df.shape}")
     st.dataframe(df.head())
+    
+    # Initialize peaks if not present
+    if 'peaks' not in st.session_state:
+        st.session_state.peaks = []
     
     # Scaling options
     st.subheader("Scaling Options")
@@ -52,18 +55,63 @@ if uploaded_file is not None:
             sq_sums = np.sqrt(np.sum(chrom_data**2, axis=0))
             chrom_scaled = chrom_data / (sq_sums + 1e-8)
         
-        # Reconstruct scaled df
-        scaled_df = pd.DataFrame(chrom_scaled.T, columns=df.columns[1:])
-        scaled_df.insert(0, df.columns[0], rt_col)
+        # Reconstruct scaled df correctly
+        scaled_df.iloc[:, 1:] = chrom_scaled
     
     st.success(f"Data scaled using '{scale_method}' method.")
     
-    # Chromatogram selection
+    # Peak labels section
+    st.subheader("Add Peak Labels")
+    col1, col2 = st.columns(2)
+    with col1:
+        compound = st.text_input("Compound Name:")
+    with col2:
+        rt_peak = st.number_input("Retention Time:", value=0.0, key="rt_peak_input")
+    
+    if st.button("Add Peak"):
+        if compound.strip():
+            st.session_state.peaks.append({"compound": compound.strip(), "rt": rt_peak})
+            st.rerun()
+    
+    # Display peaks table if any
+    if st.session_state.peaks:
+        sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
+        table_data = [{"Peak #": i+1, "Compound": p["compound"], "Retention Time": f"{p['rt']:.2f}"} 
+                      for i, p in enumerate(sorted_peaks)]
+        st.table(table_data)
+    
+    # Option to clear peaks
+    if st.button("Clear All Peaks"):
+        st.session_state.peaks = []
+        st.rerun()
+    
+    # Chromatogram selection and plotting
     st.subheader("Plot Individual Chromatogram")
     chrom_cols = scaled_df.columns[1:].tolist()
     selected_chrom = st.selectbox("Select chromatogram:", options=chrom_cols)
     
     if selected_chrom:
+        # Axis customization
+        st.subheader("Graph Customization")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            custom_title = st.text_input("Graph Title:", value=f"Chromatogram: {selected_chrom}")
+        with col2:
+            custom_xlabel = st.text_input("X-axis Label:", value="Retention Time")
+        with col3:
+            custom_ylabel = st.text_input("Y-axis Label:", value="Intensity")
+        
+        # Tick intervals
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            major_x_step = st.number_input("Major X Tick Step:", value=1.0, key="major_x")
+        with col2:
+            minor_x_step = st.number_input("Minor X Tick Step:", value=0.1, key="minor_x")
+        with col3:
+            major_y_step = st.number_input("Major Y Tick Step:", value=0.1, key="major_y")
+        with col4:
+            minor_y_step = st.number_input("Minor Y Tick Step:", value=0.01, key="minor_y")
+        
         # Axis bounds
         col1, col2 = st.columns(2)
         with col1:
@@ -78,7 +126,7 @@ if uploaded_file is not None:
         rt = scaled_df.iloc[:, 0]
         y_data = scaled_df[selected_chrom]
         
-        # Filter data for bounds if needed
+        # Filter data for bounds
         mask = (rt >= x_min) & (rt <= x_max)
         ax.plot(rt[mask], y_data[mask], linewidth=1)
         
@@ -86,79 +134,35 @@ if uploaded_file is not None:
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         
+        # Custom labels and title
+        ax.set_xlabel(custom_xlabel)
+        ax.set_ylabel(custom_ylabel)
+        ax.set_title(custom_title)
+        
         # No grid
         ax.grid(False)
         
-        # Ticks: major and minor
-        ax.xaxis.set_major_locator(MultipleLocator(1))  # Adjust base on data
-        ax.xaxis.set_minor_locator(MultipleLocator(0.1))
-        ax.yaxis.set_major_locator(MultipleLocator(0.1))
-        ax.yaxis.set_minor_locator(MultipleLocator(0.01))
+        # Custom ticks
+        ax.xaxis.set_major_locator(MultipleLocator(major_x_step))
+        ax.xaxis.set_minor_locator(MultipleLocator(minor_x_step))
+        ax.yaxis.set_major_locator(MultipleLocator(major_y_step))
+        ax.yaxis.set_minor_locator(MultipleLocator(minor_y_step))
         
-        ax.set_xlabel("Retention Time")
-        ax.set_ylabel("Intensity")
-        ax.set_title(f"Chromatogram: {selected_chrom}")
+        # Add peak labels if any
+        if st.session_state.peaks:
+            sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
+            for i, peak in enumerate(sorted_peaks):
+                rt_target = peak["rt"]
+                # Find closest index within bounds
+                mask_peak = (rt >= x_min) & (rt <= x_max)
+                rt_in_bounds = rt[mask_peak]
+                if len(rt_in_bounds) > 0:
+                    idx = np.argmin(np.abs(rt_in_bounds - rt_target))
+                    actual_rt = rt_in_bounds.iloc[idx]
+                    y_val = y_data[mask_peak].iloc[idx]
+                    offset = (y_max - y_min) * 0.02  # Small offset above peak
+                    ax.annotate(str(i+1), (actual_rt, y_val + offset), ha='center', fontsize=10, fontweight='bold')
         
         st.pyplot(fig)
-    
-    # Peak labels
-    st.subheader("Add Peak Labels")
-    label_input = st.text_area(
-        "Enter peaks (format: Compound,RetentionTime per line, e.g., Benzene,5.2\nToluene,7.1):",
-        placeholder="Compound1,RT1\nCompound2,RT2",
-        height=150
-    )
-    
-    if label_input:
-        peaks = []
-        for line in label_input.strip().split("\n"):
-            if line.strip():
-                parts = line.split(",")
-                if len(parts) == 2:
-                    compound = parts[0].strip()
-                    try:
-                        rt_peak = float(parts[1].strip())
-                        peaks.append({"compound": compound, "rt": rt_peak})
-                    except ValueError:
-                        st.error(f"Invalid RT in line: {line}")
-        
-        if peaks:
-            # Plot with labels
-            fig, ax = plt.subplots(figsize=(10, 6))
-            rt = scaled_df.iloc[:, 0]
-            y_data = scaled_df[selected_chrom]
-            
-            # Filter data
-            mask = (rt >= x_min) & (rt <= x_max)
-            ax.plot(rt[mask], y_data[mask], linewidth=1)
-            
-            # Add labels
-            label_numbers = list(range(1, len(peaks) + 1))
-            for i, (peak, num) in enumerate(zip(peaks, label_numbers)):
-                rt_target = peak["rt"]
-                # Find closest index
-                idx = np.argmin(np.abs(rt - rt_target))
-                y_val = y_data.iloc[idx]
-                offset = (y_max - y_min) * 0.02  # Small offset above peak
-                ax.annotate(str(num), (rt.iloc[idx], y_val + offset), ha='center', fontsize=10, fontweight='bold')
-            
-            # Set limits and ticks as before
-            ax.set_xlim(x_min, x_max)
-            ax.set_ylim(y_min, y_max)
-            ax.grid(False)
-            ax.xaxis.set_major_locator(MultipleLocator(1))
-            ax.xaxis.set_minor_locator(MultipleLocator(0.1))
-            ax.yaxis.set_major_locator(MultipleLocator(0.1))
-            ax.yaxis.set_minor_locator(MultipleLocator(0.01))
-            ax.set_xlabel("Retention Time")
-            ax.set_ylabel("Intensity")
-            ax.set_title(f"Chromatogram: {selected_chrom} with Peak Labels")
-            
-            st.pyplot(fig)
-            
-            # Table
-            st.subheader("Peak Table")
-            table_data = [{"Peak #": i+1, "Compound": p["compound"], "Retention Time": p["rt"]} for i, p in enumerate(peaks)]
-            st.table(table_data)
 else:
     st.info("Please upload a CSV file to get started.")
