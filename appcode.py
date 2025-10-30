@@ -25,25 +25,49 @@ elif upload_mode == "Multiple single chromatogram files":
         # Read first file for retention time
         first_file = uploaded_files[0]
         df_first = pd.read_csv(first_file, skiprows=3, header=None, names=['Retention_Time', 'Intensity'])
-        retention_time = df_first['Retention_Time']
-        
-        # Initialize combined DataFrame
-        combined_df = pd.DataFrame({'Retention_Time': retention_time})
-        
-        # Process each file
-        for file in uploaded_files:
-            df_temp = pd.read_csv(file, skiprows=3, header=None, names=['Retention_Time', 'Intensity'])
+        if len(df_first) == 0:
+            st.error(f"No data rows in first file {first_file.name} after skipping 3 rows.")
+        else:
+            retention_time = df_first['Retention_Time']
             
-            # Interpolate intensity to common retention time grid
-            f = interp1d(df_temp['Retention_Time'], df_temp['Intensity'], kind='linear', fill_value=0, bounds_error=False)
-            intensity = f(retention_time)
+            # Initialize combined DataFrame
+            combined_df = pd.DataFrame({'Retention_Time': retention_time})
             
-            # Column name from filename
-            filename = file.name.replace('.csv', '')
-            combined_df[filename] = intensity
-        
-        df = combined_df
-        st.success(f"Combined {len(uploaded_files)} files into one DataFrame.")
+            # Process each file
+            for file in uploaded_files:
+                df_temp = pd.read_csv(file, skiprows=3, header=None, names=['Retention_Time', 'Intensity'])
+                if len(df_temp) == 0:
+                    st.warning(f"No data in {file.name}, skipping.")
+                    continue
+                
+                # Convert to numeric
+                df_temp['Retention_Time'] = pd.to_numeric(df_temp['Retention_Time'], errors='coerce')
+                df_temp['Intensity'] = pd.to_numeric(df_temp['Intensity'], errors='coerce')
+                df_temp = df_temp.dropna()
+                
+                if len(df_temp) < 2:
+                    st.warning(f"Insufficient data in {file.name}, skipping.")
+                    continue
+                
+                # Check if x is increasing
+                if not np.all(np.diff(df_temp['Retention_Time']) > 0):
+                    st.warning(f"Retention times not strictly increasing in {file.name}, skipping.")
+                    continue
+                
+                # Interpolate intensity to common retention time grid
+                try:
+                    f = interp1d(df_temp['Retention_Time'], df_temp['Intensity'], kind='linear', fill_value=0, bounds_error=False)
+                    intensity = f(retention_time)
+                except Exception as e:
+                    st.warning(f"Interpolation failed for {file.name}: {e}, skipping.")
+                    continue
+                
+                # Column name from filename
+                filename = file.name.replace('.csv', '')
+                combined_df[filename] = intensity
+            
+            df = combined_df
+            st.success(f"Combined {len(combined_df.columns) - 1} files into one DataFrame.")
 
 if df is not None:
     st.success("Data loaded successfully!")
