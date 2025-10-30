@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+from scipy.interpolate import interp1d
 
 # Page config
 st.set_page_config(page_title="GC Data Processor", layout="wide")
@@ -32,7 +33,10 @@ elif upload_mode == "Multiple single chromatogram files":
         # Process each file
         for file in uploaded_files:
             df_temp = pd.read_csv(file, skiprows=3, header=None, names=['Retention_Time', 'Intensity'])
-            intensity = df_temp['Intensity']
+            
+            # Interpolate intensity to common retention time grid
+            f = interp1d(df_temp['Retention_Time'], df_temp['Intensity'], kind='linear', fill_value=0, bounds_error=False)
+            intensity = f(retention_time)
             
             # Column name from filename
             filename = file.name.replace('.csv', '')
