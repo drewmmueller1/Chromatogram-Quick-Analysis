@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+import io
 
 # Page config
 st.set_page_config(page_title="GC Data Processor", layout="wide")
@@ -212,5 +213,39 @@ if uploaded_file is not None:
                     ax.annotate(str(i+1), (lx, ly), ha='center', fontsize=10, fontweight='bold')
         
         st.pyplot(fig)
+        
+        # Export section
+        st.subheader("Export Data")
+        
+        # Export normalized data
+        csv_buffer = io.StringIO()
+        scaled_df.to_csv(csv_buffer, index=False)
+        csv_data = csv_buffer.getvalue()
+        st.download_button(
+            label="Download Normalized Data as CSV",
+            data=csv_data,
+            file_name=f"normalized_data_{scale_method.replace('/', '_')}.csv",
+            mime="text/csv"
+        )
+        
+        # Export peaks table if peaks exist
+        if st.session_state.peaks:
+            sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
+            peaks_export_df = pd.DataFrame({
+                "Peak #": range(1, len(sorted_peaks) + 1),
+                "Compound": [p["compound"] for p in sorted_peaks],
+                "Retention Time": [p["rt"] for p in sorted_peaks]
+            })
+            
+            csv_buffer_peaks = io.StringIO()
+            peaks_export_df.to_csv(csv_buffer_peaks, index=False)
+            csv_data_peaks = csv_buffer_peaks.getvalue()
+            st.download_button(
+                label="Download Peaks Table as CSV",
+                data=csv_data_peaks,
+                file_name="peaks_table.csv",
+                mime="text/csv"
+            )
+            st.dataframe(peaks_export_df)
 else:
     st.info("Please upload a CSV file to get started.")
