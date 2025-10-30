@@ -38,24 +38,6 @@ if uploaded_file is not None:
                 options=["None", "Min/Max", "Sum", "Square Root Sum of Squares"]
             )
         
-        # Graph customization in expander
-        with st.expander("Graph Customization", expanded=False):
-            custom_title = st.text_input("Graph Title:", value="Chromatogram")
-            custom_xlabel = st.text_input("X-axis Label:", value="Retention Time")
-            custom_ylabel = st.text_input("Y-axis Label:", value="Intensity")
-            
-            # Tick intervals
-            major_x_step = st.number_input("Major X Tick Step:", value=1.0, key="major_x")
-            minor_x_step = st.number_input("Minor X Tick Step:", value=0.5, key="minor_x")
-            major_y_step = st.number_input("Major Y Tick Step:", value=0.25, key="major_y")
-            minor_y_step = st.number_input("Minor Y Tick Step:", value=0.125, key="minor_y")
-            
-            # Axis bounds
-            x_min = st.number_input("X-axis min (RT):", value=0.0, key="x_min")
-            x_max = st.number_input("X-axis max (RT):", value=30.0, key="x_max")
-            y_min = st.number_input("Y-axis min:", value=0.0, key="y_min")
-            y_max = st.number_input("Y-axis max:", value=1.1, key="y_max")
-        
         # Peak management in expander
         with st.expander("Peak Management", expanded=False):
             if st.button("Clear All Peaks"):
@@ -111,6 +93,25 @@ if uploaded_file is not None:
     if selected_chrom:
         rt = scaled_df.iloc[:, 0]
         y_data = scaled_df[selected_chrom]
+        
+        # Graph customization in sidebar
+        with st.sidebar:
+            with st.expander("Graph Customization", expanded=False):
+                custom_title = st.text_input("Graph Title:", value=f"Chromatogram: {selected_chrom}")
+                custom_xlabel = st.text_input("X-axis Label:", value="Retention Time")
+                custom_ylabel = st.text_input("Y-axis Label:", value="Intensity")
+                
+                # Tick intervals
+                major_x_step = st.number_input("Major X Tick Step:", value=1.0, key="major_x")
+                minor_x_step = st.number_input("Minor X Tick Step:", value=0.1, key="minor_x")
+                major_y_step = st.number_input("Major Y Tick Step:", value=0.1, key="major_y")
+                minor_y_step = st.number_input("Minor Y Tick Step:", value=0.01, key="minor_y")
+                
+                # Axis bounds
+                x_min = st.number_input("X-axis min (RT):", value=float(rt.min()), key="x_min")
+                x_max = st.number_input("X-axis max (RT):", value=float(rt.max()), key="x_max")
+                y_min = st.number_input("Y-axis min:", value=0.0, key="y_min")
+                y_max = st.number_input("Y-axis max:", value=float(y_data.max()) * 1.1, key="y_max")
         
         # Peak labels section
         st.subheader("Add Peak Labels")
