@@ -60,53 +60,6 @@ if uploaded_file is not None:
     
     st.success(f"Data scaled using '{scale_method}' method.")
     
-    # Peak labels section
-    st.subheader("Add Peak Labels")
-    col1, col2 = st.columns(2)
-    with col1:
-        compound = st.text_input("Compound Name:")
-    with col2:
-        rt_peak = st.number_input("Retention Time:", value=0.0, key="rt_peak_input")
-    
-    if st.button("Add Peak"):
-        if compound.strip():
-            st.session_state.peaks.append({"compound": compound.strip(), "rt": rt_peak})
-            st.rerun()
-    
-    # Display peaks table if any
-    if st.session_state.peaks:
-        sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
-        table_data = [{"Peak #": i+1, "Compound": p["compound"], "Retention Time": f"{p['rt']:.2f}"} 
-                      for i, p in enumerate(sorted_peaks)]
-        st.dataframe(table_data)
-        
-        # Add remove single peak
-        st.subheader("Remove Peak")
-        peak_to_remove = st.selectbox("Select peak to remove:", 
-                                      options=[f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
-                                               for i, p in enumerate(sorted_peaks)],
-                                      format_func=lambda x: x)
-        if st.button("Remove Selected Peak"):
-            if peak_to_remove:
-                # Find index in sorted list
-                remove_idx = [f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
-                              for i, p in enumerate(sorted_peaks)].index(peak_to_remove)
-                original_idx = sorted_peaks[remove_idx]['original_idx'] if 'original_idx' in sorted_peaks[remove_idx] else None
-                if original_idx is not None:
-                    del st.session_state.peaks[original_idx]
-                else:
-                    # Fallback: remove by matching
-                    for idx, peak in enumerate(st.session_state.peaks):
-                        if abs(peak['rt'] - sorted_peaks[remove_idx]['rt']) < 1e-6 and peak['compound'] == sorted_peaks[remove_idx]['compound']:
-                            del st.session_state.peaks[idx]
-                            break
-                st.rerun()
-    
-    # Option to clear peaks
-    if st.button("Clear All Peaks"):
-        st.session_state.peaks = []
-        st.rerun()
-    
     # Chromatogram selection
     st.subheader("Plot Individual Chromatogram")
     chrom_cols = scaled_df.columns[1:].tolist()
@@ -132,10 +85,88 @@ if uploaded_file is not None:
         y_min = st.sidebar.number_input("Y-axis min:", value=0.0, key="y_min")
         y_max = st.sidebar.number_input("Y-axis max:", value=float(scaled_df[selected_chrom].max()) * 1.1, key="y_max")
         
+        # Peak labels section
+        st.subheader("Add Peak Labels")
+        col1, col2 = st.columns(2)
+        with col1:
+            compound = st.text_input("Compound Name:")
+        with col2:
+            rt_peak = st.number_input("Retention Time:", value=0.0, key="rt_peak_input")
+        
+        if st.button("Add Peak"):
+            if compound.strip():
+                st.session_state.peaks.append({
+                    "compound": compound.strip(), 
+                    "rt": rt_peak, 
+                    "label_x": rt_peak, 
+                    "label_y": np.nan
+                })
+                st.rerun()
+        
+        # Option to clear peaks
+        if st.button("Clear All Peaks"):
+            st.session_state.peaks = []
+            st.rerun()
+        
+        # Display and edit peaks table if any
+        if st.session_state.peaks:
+            rt = scaled_df.iloc[:, 0]
+            y_data = scaled_df[selected_chrom]
+            
+            df_peaks = pd.DataFrame(st.session_state.peaks)
+            
+            if st.button("Auto-calculate label positions"):
+                for idx in df_peaks.index:
+                    rt_target = df_peaks.loc[idx, 'rt']
+                    # Find closest index
+                    closest_idx = np.argmin(np.abs(rt - rt_target))
+                    y_val = y_data.iloc[closest_idx]
+                    offset = (y_max - y_min) * 0.05  # Larger offset for better spacing
+                    df_peaks.loc[idx, 'label_x'] = rt_target
+                    df_peaks.loc[idx, 'label_y'] = y_val + offset
+                st.session_state.peaks = df_peaks.to_dict('records')
+                st.rerun()
+            
+            # Data editor for editing positions (note: avoid editing compound and rt)
+            st.info("Edit label positions below. Do not change compound or RT columns.")
+            edited_df = st.data_editor(
+                df_peaks,
+                column_config={
+                    "compound": st.column_config.TextColumn("Compound"),
+                    "rt": st.column_config.NumberColumn("Retention Time", format="%.2f"),
+                    "label_x": st.column_config.NumberColumn("Label X Position"),
+                    "label_y": st.column_config.NumberColumn("Label Y Position"),
+                },
+                num_rows="fixed",
+                use_container_width=True
+            )
+            
+            # Update session_state if edited
+            if not edited_df.equals(df_peaks):
+                # Preserve original compound and rt if somehow changed, but update positions
+                for i, row in edited_df.iterrows():
+                    st.session_state.peaks[i]['label_x'] = row['label_x']
+                    st.session_state.peaks[i]['label_y'] = row['label_y']
+                st.rerun()
+            
+            # Remove single peak
+            st.subheader("Remove Peak")
+            sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
+            if sorted_peaks:
+                peak_options = [f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
+                                for i, p in enumerate(sorted_peaks)]
+                peak_to_remove = st.selectbox("Select peak to remove:", options=peak_options)
+                if st.button("Remove Selected Peak") and peak_to_remove:
+                    remove_str = peak_to_remove
+                    # Find matching peak by compound and rt
+                    for idx, peak in enumerate(st.session_state.peaks):
+                        if f"{peak['compound']} ({peak['rt']:.2f})" in remove_str:
+                            del st.session_state.peaks[idx]
+                            break
+                    st.rerun()
+        
         # Main plot area
         fig, ax = plt.subplots(figsize=(10, 6))
-        rt = scaled_df.iloc[:, 0]
-        y_data = scaled_df[selected_chrom]
         
         # Filter data for bounds
         mask = (rt >= x_min) & (rt <= x_max)
@@ -161,23 +192,24 @@ if uploaded_file is not None:
         
         # Add peak labels if any
         if st.session_state.peaks:
-            # Add original_idx when adding peaks
-            if 'original_idx' not in st.session_state.peaks[0]:
-                for i in range(len(st.session_state.peaks)):
-                    st.session_state.peaks[i]['original_idx'] = i
-            
             sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
             for i, peak in enumerate(sorted_peaks):
                 rt_target = peak["rt"]
-                # Find closest index within bounds
-                mask_peak = (rt >= x_min) & (rt <= x_max)
-                rt_in_bounds = rt[mask_peak]
-                if len(rt_in_bounds) > 0:
-                    idx = np.argmin(np.abs(rt_in_bounds - rt_target))
-                    actual_rt = rt_in_bounds.iloc[idx]
-                    y_val = y_data[mask_peak].iloc[idx]
-                    offset = (y_max - y_min) * 0.02  # Small offset above peak
-                    ax.annotate(str(i+1), (actual_rt, y_val + offset), ha='center', fontsize=10, fontweight='bold')
+                lx = peak.get('label_x', rt_target)
+                ly = peak.get('label_y')
+                if np.isnan(ly):
+                    # Calculate if not set
+                    mask_peak = (rt >= x_min) & (rt <= x_max)
+                    rt_in_bounds = rt[mask_peak]
+                    if len(rt_in_bounds) > 0:
+                        idx = np.argmin(np.abs(rt_in_bounds - rt_target))
+                        actual_rt = rt_in_bounds.iloc[idx]
+                        y_val = y_data[mask_peak].iloc[idx]
+                        ly = y_val + (y_max - y_min) * 0.02
+                    else:
+                        continue
+                if x_min <= lx <= x_max and y_min <= ly <= y_max:
+                    ax.annotate(str(i+1), (lx, ly), ha='center', fontsize=10, fontweight='bold')
         
         st.pyplot(fig)
 else:
