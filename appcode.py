@@ -32,14 +32,14 @@ if uploaded_file is not None:
         st.header("Options")
         
         # Scaling options in expander
-        with st.expander("Scaling Options", expanded=True):
+        with st.expander("Scaling Options", expanded=False):
             scale_method = st.radio(
                 "Select scaling method for chromatograms:",
                 options=["None", "Min/Max", "Sum", "Square Root Sum of Squares"]
             )
         
         # Graph customization in expander
-        with st.expander("Graph Customization", expanded=True):
+        with st.expander("Graph Customization", expanded=False):
             custom_title = st.text_input("Graph Title:", value="Chromatogram")
             custom_xlabel = st.text_input("X-axis Label:", value="Retention Time")
             custom_ylabel = st.text_input("Y-axis Label:", value="Intensity")
@@ -57,7 +57,7 @@ if uploaded_file is not None:
             y_max = st.number_input("Y-axis max:", value=1.1, key="y_max")
         
         # Peak management in expander
-        with st.expander("Peak Management"):
+        with st.expander("Peak Management", expanded=False):
             if st.button("Clear All Peaks"):
                 st.session_state.peaks = []
                 st.rerun()
