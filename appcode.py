@@ -17,6 +17,7 @@ if upload_mode == "Single combined file":
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
+        st.success("Combined file loaded successfully!")
 elif upload_mode == "Multiple single chromatogram files":
     uploaded_files = st.file_uploader("Choose CSV files", type="csv", accept_multiple_files=True)
     if uploaded_files:
