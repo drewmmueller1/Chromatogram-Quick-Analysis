@@ -27,12 +27,54 @@ if uploaded_file is not None:
     if 'peaks' not in st.session_state:
         st.session_state.peaks = []
     
-    # Scaling options
-    st.subheader("Scaling Options")
-    scale_method = st.radio(
-        "Select scaling method for chromatograms:",
-        options=["None", "Min/Max", "Sum", "Square Root Sum of Squares"]
-    )
+    # Sidebar for options
+    with st.sidebar:
+        st.header("Options")
+        
+        # Scaling options in expander
+        with st.expander("Scaling Options", expanded=True):
+            scale_method = st.radio(
+                "Select scaling method for chromatograms:",
+                options=["None", "Min/Max", "Sum", "Square Root Sum of Squares"]
+            )
+        
+        # Graph customization in expander
+        with st.expander("Graph Customization", expanded=True):
+            custom_title = st.text_input("Graph Title:", value="Chromatogram")
+            custom_xlabel = st.text_input("X-axis Label:", value="Retention Time")
+            custom_ylabel = st.text_input("Y-axis Label:", value="Intensity")
+            
+            # Tick intervals
+            major_x_step = st.number_input("Major X Tick Step:", value=1.0, key="major_x")
+            minor_x_step = st.number_input("Minor X Tick Step:", value=0.1, key="minor_x")
+            major_y_step = st.number_input("Major Y Tick Step:", value=0.1, key="major_y")
+            minor_y_step = st.number_input("Minor Y Tick Step:", value=0.01, key="minor_y")
+            
+            # Axis bounds
+            x_min = st.number_input("X-axis min (RT):", value=0.0, key="x_min")
+            x_max = st.number_input("X-axis max (RT):", value=30.0, key="x_max")
+            y_min = st.number_input("Y-axis min:", value=0.0, key="y_min")
+            y_max = st.number_input("Y-axis max:", value=1.1, key="y_max")
+        
+        # Peak management in expander
+        with st.expander("Peak Management"):
+            if st.button("Clear All Peaks"):
+                st.session_state.peaks = []
+                st.rerun()
+            
+            if st.session_state.peaks:
+                sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
+                peak_options = [f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
+                                for i, p in enumerate(sorted_peaks)]
+                peak_to_remove = st.selectbox("Select peak to remove:", options=peak_options)
+                if st.button("Remove Selected Peak") and peak_to_remove:
+                    remove_str = peak_to_remove
+                    # Find matching peak by compound and rt
+                    for idx, peak in enumerate(st.session_state.peaks):
+                        if f"{peak['compound']} ({peak['rt']:.2f})" in remove_str:
+                            del st.session_state.peaks[idx]
+                            break
+                    st.rerun()
     
     # Apply scaling
     scaled_df = df.copy()
@@ -70,25 +112,6 @@ if uploaded_file is not None:
         rt = scaled_df.iloc[:, 0]
         y_data = scaled_df[selected_chrom]
         
-        # Sidebar for customization
-        st.sidebar.header("Graph Customization")
-        
-        custom_title = st.sidebar.text_input("Graph Title:", value=f"Chromatogram: {selected_chrom}")
-        custom_xlabel = st.sidebar.text_input("X-axis Label:", value="Retention Time")
-        custom_ylabel = st.sidebar.text_input("Y-axis Label:", value="Intensity")
-        
-        # Tick intervals
-        major_x_step = st.sidebar.number_input("Major X Tick Step:", value=1.0, key="major_x")
-        minor_x_step = st.sidebar.number_input("Minor X Tick Step:", value=0.1, key="minor_x")
-        major_y_step = st.sidebar.number_input("Major Y Tick Step:", value=0.1, key="major_y")
-        minor_y_step = st.sidebar.number_input("Minor Y Tick Step:", value=0.01, key="minor_y")
-        
-        # Axis bounds in sidebar
-        x_min = st.sidebar.number_input("X-axis min (RT):", value=float(scaled_df.iloc[0, 0]), key="x_min")
-        x_max = st.sidebar.number_input("X-axis max (RT):", value=float(scaled_df.iloc[-1, 0]), key="x_max")
-        y_min = st.sidebar.number_input("Y-axis min:", value=0.0, key="y_min")
-        y_max = st.sidebar.number_input("Y-axis max:", value=float(scaled_df[selected_chrom].max()) * 1.1, key="y_max")
-        
         # Peak labels section
         st.subheader("Add Peak Labels")
         col1, col2 = st.columns(2)
@@ -107,26 +130,9 @@ if uploaded_file is not None:
                 })
                 st.rerun()
         
-        # Option to clear peaks
-        if st.button("Clear All Peaks"):
-            st.session_state.peaks = []
-            st.rerun()
-        
         # Display and edit peaks table if any
         if st.session_state.peaks:
             df_peaks = pd.DataFrame(st.session_state.peaks)
-            
-            if st.button("Auto-calculate label positions"):
-                for idx in df_peaks.index:
-                    rt_target = df_peaks.loc[idx, 'rt']
-                    # Find closest index
-                    closest_idx = np.argmin(np.abs(rt - rt_target))
-                    y_val = y_data.iloc[closest_idx]
-                    offset = (y_max - y_min) * 0.05  # Larger offset for better spacing
-                    df_peaks.loc[idx, 'label_x'] = rt_target
-                    df_peaks.loc[idx, 'label_y'] = y_val + offset
-                st.session_state.peaks = df_peaks.to_dict('records')
-                st.rerun()
             
             # Data editor for editing positions (note: avoid editing compound and rt)
             st.info("Edit label positions below. Do not change compound or RT columns.")
@@ -149,22 +155,6 @@ if uploaded_file is not None:
                     st.session_state.peaks[i]['label_x'] = row['label_x']
                     st.session_state.peaks[i]['label_y'] = row['label_y']
                 st.rerun()
-            
-            # Remove single peak
-            st.subheader("Remove Peak")
-            sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
-            if sorted_peaks:
-                peak_options = [f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
-                                for i, p in enumerate(sorted_peaks)]
-                peak_to_remove = st.selectbox("Select peak to remove:", options=peak_options)
-                if st.button("Remove Selected Peak") and peak_to_remove:
-                    remove_str = peak_to_remove
-                    # Find matching peak by compound and rt
-                    for idx, peak in enumerate(st.session_state.peaks):
-                        if f"{peak['compound']} ({peak['rt']:.2f})" in remove_str:
-                            del st.session_state.peaks[idx]
-                            break
-                    st.rerun()
         
         # Main plot area
         fig, ax = plt.subplots(figsize=(10, 6))
