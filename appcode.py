@@ -78,50 +78,61 @@ if uploaded_file is not None:
         sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
         table_data = [{"Peak #": i+1, "Compound": p["compound"], "Retention Time": f"{p['rt']:.2f}"} 
                       for i, p in enumerate(sorted_peaks)]
-        st.table(table_data)
+        st.dataframe(table_data)
+        
+        # Add remove single peak
+        st.subheader("Remove Peak")
+        peak_to_remove = st.selectbox("Select peak to remove:", 
+                                      options=[f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
+                                               for i, p in enumerate(sorted_peaks)],
+                                      format_func=lambda x: x)
+        if st.button("Remove Selected Peak"):
+            if peak_to_remove:
+                # Find index in sorted list
+                remove_idx = [f"Peak #{i+1}: {p['compound']} ({p['rt']:.2f})" 
+                              for i, p in enumerate(sorted_peaks)].index(peak_to_remove)
+                original_idx = sorted_peaks[remove_idx]['original_idx'] if 'original_idx' in sorted_peaks[remove_idx] else None
+                if original_idx is not None:
+                    del st.session_state.peaks[original_idx]
+                else:
+                    # Fallback: remove by matching
+                    for idx, peak in enumerate(st.session_state.peaks):
+                        if abs(peak['rt'] - sorted_peaks[remove_idx]['rt']) < 1e-6 and peak['compound'] == sorted_peaks[remove_idx]['compound']:
+                            del st.session_state.peaks[idx]
+                            break
+                st.rerun()
     
     # Option to clear peaks
     if st.button("Clear All Peaks"):
         st.session_state.peaks = []
         st.rerun()
     
-    # Chromatogram selection and plotting
+    # Chromatogram selection
     st.subheader("Plot Individual Chromatogram")
     chrom_cols = scaled_df.columns[1:].tolist()
     selected_chrom = st.selectbox("Select chromatogram:", options=chrom_cols)
     
     if selected_chrom:
-        # Axis customization
-        st.subheader("Graph Customization")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            custom_title = st.text_input("Graph Title:", value=f"Chromatogram: {selected_chrom}")
-        with col2:
-            custom_xlabel = st.text_input("X-axis Label:", value="Retention Time")
-        with col3:
-            custom_ylabel = st.text_input("Y-axis Label:", value="Intensity")
+        # Sidebar for customization
+        st.sidebar.header("Graph Customization")
+        
+        custom_title = st.sidebar.text_input("Graph Title:", value=f"Chromatogram: {selected_chrom}")
+        custom_xlabel = st.sidebar.text_input("X-axis Label:", value="Retention Time")
+        custom_ylabel = st.sidebar.text_input("Y-axis Label:", value="Intensity")
         
         # Tick intervals
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            major_x_step = st.number_input("Major X Tick Step:", value=1.0, key="major_x")
-        with col2:
-            minor_x_step = st.number_input("Minor X Tick Step:", value=0.1, key="minor_x")
-        with col3:
-            major_y_step = st.number_input("Major Y Tick Step:", value=0.1, key="major_y")
-        with col4:
-            minor_y_step = st.number_input("Minor Y Tick Step:", value=0.01, key="minor_y")
+        major_x_step = st.sidebar.number_input("Major X Tick Step:", value=1.0, key="major_x")
+        minor_x_step = st.sidebar.number_input("Minor X Tick Step:", value=0.1, key="minor_x")
+        major_y_step = st.sidebar.number_input("Major Y Tick Step:", value=0.1, key="major_y")
+        minor_y_step = st.sidebar.number_input("Minor Y Tick Step:", value=0.01, key="minor_y")
         
-        # Axis bounds
-        col1, col2 = st.columns(2)
-        with col1:
-            x_min = st.number_input("X-axis min (RT):", value=float(scaled_df.iloc[0, 0]), key="x_min")
-            x_max = st.number_input("X-axis max (RT):", value=float(scaled_df.iloc[-1, 0]), key="x_max")
-        with col2:
-            y_min = st.number_input("Y-axis min:", value=0.0, key="y_min")
-            y_max = st.number_input("Y-axis max:", value=float(scaled_df[selected_chrom].max()) * 1.1, key="y_max")
+        # Axis bounds in sidebar
+        x_min = st.sidebar.number_input("X-axis min (RT):", value=float(scaled_df.iloc[0, 0]), key="x_min")
+        x_max = st.sidebar.number_input("X-axis max (RT):", value=float(scaled_df.iloc[-1, 0]), key="x_max")
+        y_min = st.sidebar.number_input("Y-axis min:", value=0.0, key="y_min")
+        y_max = st.sidebar.number_input("Y-axis max:", value=float(scaled_df[selected_chrom].max()) * 1.1, key="y_max")
         
-        # Plot
+        # Main plot area
         fig, ax = plt.subplots(figsize=(10, 6))
         rt = scaled_df.iloc[:, 0]
         y_data = scaled_df[selected_chrom]
@@ -150,6 +161,11 @@ if uploaded_file is not None:
         
         # Add peak labels if any
         if st.session_state.peaks:
+            # Add original_idx when adding peaks
+            if 'original_idx' not in st.session_state.peaks[0]:
+                for i in range(len(st.session_state.peaks)):
+                    st.session_state.peaks[i]['original_idx'] = i
+            
             sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
             for i, peak in enumerate(sorted_peaks):
                 rt_target = peak["rt"]
