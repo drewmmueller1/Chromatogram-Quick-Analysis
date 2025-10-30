@@ -214,7 +214,18 @@ if uploaded_file is not None:
         
         st.pyplot(fig)
         
-        # Export section
+        # Display peaks table under graph if peaks exist
+        if st.session_state.peaks:
+            sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt'])
+            peaks_display_df = pd.DataFrame({
+                "Peak #": range(1, len(sorted_peaks) + 1),
+                "Compound": [p["compound"] for p in sorted_peaks],
+                "Retention Time": [p["rt"] for p in sorted_peaks]
+            })
+            st.subheader("Peaks Table")
+            st.dataframe(peaks_display_df, hide_index=True)
+        
+        # Export section after table
         st.subheader("Export Data")
         
         # Export normalized data
@@ -246,6 +257,5 @@ if uploaded_file is not None:
                 file_name="peaks_table.csv",
                 mime="text/csv"
             )
-            st.dataframe(peaks_export_df)
 else:
     st.info("Please upload a CSV file to get started.")
