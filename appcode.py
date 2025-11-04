@@ -22,11 +22,6 @@ if uploaded_file is not None:
     df = load_csv(uploaded_file)
     st.success("Data loaded successfully!")
     
-    # Display basic info
-    st.subheader("Data Overview")
-    st.write(f"Shape: {df.shape}")
-    st.dataframe(df.head())
-    
     # Initialize peaks if not present
     if 'peaks' not in st.session_state:
         st.session_state.peaks = []
