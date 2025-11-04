@@ -15,7 +15,8 @@ uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
 @st.cache_data
 def load_csv(uploaded_file):
-    return pd.read_csv(uploaded_file)
+    # Load with float32 to reduce memory usage
+    return pd.read_csv(uploaded_file, dtype=np.float32)
 
 if uploaded_file is not None:
     # Load data
@@ -59,33 +60,32 @@ if uploaded_file is not None:
 
     @st.cache_data
     def apply_scaling(df, scale_method):
-        scaled = df.copy()
-        if scale_method != "None":
-            rt_col = df.iloc[:, 0]
-            chrom_data = df.iloc[:, 1:].values
-            
-            if scale_method == "Min/Max":
-                # Normalize each column to [0,1]
-                chrom_min = np.min(chrom_data, axis=0)
-                chrom_max = np.max(chrom_data, axis=0)
-                chrom_scaled = (chrom_data - chrom_min) / (chrom_max - chrom_min + 1e-8)
-            
-            elif scale_method == "Sum":
-                # Normalize by sum (area)
-                sums = np.sum(chrom_data, axis=0)
-                chrom_scaled = chrom_data / (sums + 1e-8)
-            
-            elif scale_method == "Square Root Sum of Squares":
-                # RMS normalization
-                sq_sums = np.sqrt(np.sum(chrom_data**2, axis=0))
-                chrom_scaled = chrom_data / (sq_sums + 1e-8)
-            
-            # Reconstruct scaled df correctly
-            scaled.iloc[:, 1:] = chrom_scaled
-        return scaled
+        if scale_method == "None":
+            return df
+        rt_col = df.iloc[:, 0].values
+        chrom_data = df.iloc[:, 1:].values  # Already float32
+        
+        if scale_method == "Min/Max":
+            chrom_min = np.min(chrom_data, axis=0)
+            chrom_max = np.max(chrom_data, axis=0)
+            chrom_scaled = (chrom_data - chrom_min) / (chrom_max - chrom_min + 1e-8)
+        
+        elif scale_method == "Sum":
+            sums = np.sum(chrom_data, axis=0)
+            chrom_scaled = chrom_data / (sums + 1e-8)
+        
+        elif scale_method == "Square Root Sum of Squares":
+            sq_sums = np.sqrt(np.sum(chrom_data**2, axis=0))
+            chrom_scaled = chrom_data / (sq_sums + 1e-8)
+        
+        # Reconstruct without full copy: stack RT and scaled data
+        scaled_data = np.column_stack([rt_col[:, np.newaxis], chrom_scaled])
+        columns = df.columns
+        return pd.DataFrame(scaled_data, columns=columns)
     
     # Apply scaling
     scaled_df = apply_scaling(df, scale_method)
+    del df  # Free original dataframe memory
     
     if scale_method != "None":
         st.success(f"Data scaled using '{scale_method}' method.")
