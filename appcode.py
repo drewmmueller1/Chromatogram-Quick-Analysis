@@ -117,22 +117,14 @@ if uploaded_file is not None:
                 x_max = st.number_input("X-axis max (RT):", value=float(rt.max()), key="x_max")
                 y_min = st.number_input("Y-axis min:", value=0.0, key="y_min")
                 y_max = st.number_input("Y-axis max:", value=float(y_data.max()) * 1.1, key="y_max")
-                
-                # Downsampling for large datasets
-                max_plot_points = st.number_input("Max plot points (for downsampling):", min_value=500, max_value=20000, value=5000, key="max_points")
         
         mask = (rt >= x_min) & (rt <= x_max)
         rt_masked = rt[mask]
         y_masked = y_data[mask]
         
-        # Downsample for plotting if necessary
-        if len(rt_masked) > max_plot_points:
-            indices = np.linspace(0, len(rt_masked) - 1, max_plot_points, dtype=int)
-            rt_plot = rt_masked[indices]
-            y_plot = y_masked[indices]
-        else:
-            rt_plot = rt_masked
-            y_plot = y_masked
+        # No downsampling: use full masked data
+        rt_plot = rt_masked
+        y_plot = y_masked
         
         # Peak labels section
         st.subheader("Add Peak Labels")
@@ -181,45 +173,43 @@ if uploaded_file is not None:
         # Sort peaks once for plotting and table
         sorted_peaks = sorted(st.session_state.peaks, key=lambda x: x['rt']) if st.session_state.peaks else []
         
+        # Cached plot creation
+        @st.cache_data
+        def create_plot(rt_plot, y_plot, x_min, x_max, y_min, y_max, custom_title, custom_xlabel, custom_ylabel,
+                        major_x_step, minor_x_step, major_y_step, minor_y_step, sorted_peaks, rt_masked, y_masked):
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(rt_plot, y_plot, linewidth=1)
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+            ax.set_xlabel(custom_xlabel)
+            ax.set_ylabel(custom_ylabel)
+            ax.set_title(custom_title)
+            ax.grid(False)
+            ax.xaxis.set_major_locator(MultipleLocator(major_x_step))
+            ax.xaxis.set_minor_locator(MultipleLocator(minor_x_step))
+            ax.yaxis.set_major_locator(MultipleLocator(major_y_step))
+            ax.yaxis.set_minor_locator(MultipleLocator(minor_y_step))
+            
+            # Peak annotations
+            if sorted_peaks and len(rt_masked) > 0:
+                for i, peak in enumerate(sorted_peaks):
+                    rt_target = peak["rt"]
+                    lx = peak.get('label_x', rt_target)
+                    ly = peak.get('label_y', np.nan)
+                    if np.isnan(ly):
+                        # Calculate using full masked data
+                        diffs = np.abs(rt_masked - rt_target)
+                        idx = np.argmin(diffs)
+                        y_val = y_masked[idx]
+                        ly = y_val + (y_max - y_min) * 0.02
+                    if x_min <= lx <= x_max and y_min <= ly <= y_max:
+                        ax.annotate(str(i+1), (lx, ly), ha='center', fontsize=10, fontweight='bold')
+            
+            return fig
+        
         # Main plot area
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        # Plot downsampled data
-        ax.plot(rt_plot, y_plot, linewidth=1)
-        
-        # Set limits
-        ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_min, y_max)
-        
-        # Custom labels and title
-        ax.set_xlabel(custom_xlabel)
-        ax.set_ylabel(custom_ylabel)
-        ax.set_title(custom_title)
-        
-        # No grid
-        ax.grid(False)
-        
-        # Custom ticks
-        ax.xaxis.set_major_locator(MultipleLocator(major_x_step))
-        ax.xaxis.set_minor_locator(MultipleLocator(minor_x_step))
-        ax.yaxis.set_major_locator(MultipleLocator(major_y_step))
-        ax.yaxis.set_minor_locator(MultipleLocator(minor_y_step))
-        
-        # Add peak labels if any (use full masked data for accurate y_val)
-        if sorted_peaks and len(rt_masked) > 0:
-            for i, peak in enumerate(sorted_peaks):
-                rt_target = peak["rt"]
-                lx = peak.get('label_x', rt_target)
-                ly = peak.get('label_y', np.nan)
-                if np.isnan(ly):
-                    # Calculate using full masked data
-                    diffs = np.abs(rt_masked - rt_target)
-                    idx = np.argmin(diffs)
-                    y_val = y_masked[idx]
-                    ly = y_val + (y_max - y_min) * 0.02
-                if x_min <= lx <= x_max and y_min <= ly <= y_max:
-                    ax.annotate(str(i+1), (lx, ly), ha='center', fontsize=10, fontweight='bold')
-        
+        fig = create_plot(rt_plot, y_plot, x_min, x_max, y_min, y_max, custom_title, custom_xlabel, custom_ylabel,
+                          major_x_step, minor_x_step, major_y_step, minor_y_step, sorted_peaks, rt_masked, y_masked)
         st.pyplot(fig)
         
         # Display peaks table under graph if peaks exist
